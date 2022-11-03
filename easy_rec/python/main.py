@@ -13,6 +13,7 @@ import os
 import six
 import tensorflow as tf
 from tensorflow.core.protobuf import saved_model_pb2
+from tensorflow.core.protobuf import rewriter_config_pb2
 
 import easy_rec
 from easy_rec.python.builders import strategy_builder
@@ -93,7 +94,7 @@ def _get_input_fn(data_config,
   return input_fn
 
 
-def _create_estimator(pipeline_config, distribution=None, params={}):
+def _create_estimator(pipeline_config, distribution=None, params={}, FLAGS=None):
   model_config = pipeline_config.model_config
   train_config = pipeline_config.train_config
   gpu_options = GPUOptions(allow_growth=False)
@@ -104,6 +105,9 @@ def _create_estimator(pipeline_config, distribution=None, params={}):
       inter_op_parallelism_threads=train_config.inter_op_parallelism_threads,
       intra_op_parallelism_threads=train_config.intra_op_parallelism_threads)
   session_config.device_filters.append('/job:ps')
+  if FLAGS.precision == 'float16' or FLAGS.precision == 'bfloat16':
+    session_config.graph_options.rewrite_options.auto_mixed_precision_mkl = rewriter_config_pb2.RewriterConfig.ON
+    session_config.graph_options.rewrite_options.auto_mixed_precision = rewriter_config_pb2.RewriterConfig.ON
   model_cls = EasyRecModel.create_class(model_config.model_class)
 
   save_checkpoints_steps = None
@@ -337,7 +341,7 @@ def _train_and_evaluate_impl(pipeline_config,
 def evaluate(pipeline_config,
              eval_checkpoint_path='',
              eval_data_path=None,
-             eval_result_filename='eval_result.txt'):
+             eval_result_filename='eval_result.txt', FLAGS=None):
   """Evaluate a EasyRec model defined in pipeline_config_path.
 
   Evaluate the model defined in pipeline_config_path on the eval data,
@@ -361,6 +365,10 @@ def evaluate(pipeline_config,
       * pipeline_config_path does not exist
   """
   pipeline_config = config_util.get_configs_from_pipeline_file(pipeline_config)
+  pipeline_config.data_config.batch_size = FLAGS.batch_size
+  pipeline_config.eval_config.num_examples = FLAGS.num_iter * FLAGS.batch_size
+  pipeline_config.eval_input_path = FLAGS.dataset_dir
+  pipeline_config.model_dir = FLAGS.ckpt_dir
   if pipeline_config.fg_json_path:
     fg_util.load_fg_json_to_config(pipeline_config)
   if eval_data_path is not None:
@@ -387,7 +395,7 @@ def evaluate(pipeline_config,
         print('server_target = %s' % server_target)
 
   distribution = strategy_builder.build(train_config)
-  estimator, run_config = _create_estimator(pipeline_config, distribution)
+  estimator, run_config = _create_estimator(pipeline_config, distribution, FLAGS=FLAGS)
   eval_spec = _create_eval_export_spec(pipeline_config, eval_data)
   ckpt_path = _get_ckpt_path(pipeline_config, eval_checkpoint_path)
 

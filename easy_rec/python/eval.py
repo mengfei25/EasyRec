@@ -37,6 +37,11 @@ tf.app.flags.DEFINE_string('eval_result_path', 'eval_result.txt',
 tf.app.flags.DEFINE_bool('distribute_eval', False,
                          'use distribute parameter server for train and eval.')
 tf.app.flags.DEFINE_bool('is_on_ds', False, help='is on ds')
+tf.app.flags.DEFINE_string('dataset_dir', './test.csv', 'dataset_dir')
+tf.app.flags.DEFINE_string('ckpt_dir', './_ckpt', 'ckpt_dir')
+tf.app.flags.DEFINE_string('precision', 'float32', 'precision')
+tf.app.flags.DEFINE_integer('batch_size', 1, 'batch_size')
+tf.app.flags.DEFINE_integer('num_iter', 1, 'num_iter')
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -68,7 +73,7 @@ def main(argv):
   else:
     os.environ['distribute_eval'] = 'False'
     eval_result = evaluate(pipeline_config_path, FLAGS.checkpoint_path,
-                           FLAGS.eval_input_path, FLAGS.eval_result_path)
+                           FLAGS.eval_input_path, FLAGS.eval_result_path, FLAGS)
   if eval_result is not None:
     # when distribute evaluate, only master has eval_result.
     for key in sorted(eval_result):
